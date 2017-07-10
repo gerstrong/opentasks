@@ -1,0 +1,18 @@
+The carrot lib is built with Java 8 by default,
+so until Java 8 bytecode is supported on Android we need to build it manually:
+
+Build it from
+https://github.com/codeka/carrot
+with setting these in its build.gradle:
+
+targetCompatibility = '1.7'
+sourceCompatibility = '1.7'
+
+
+./gradlew jar
+./gradlew javadocJar
+./gradlew sourcesJar
+
+
+Get the version with:
+git describe --tags

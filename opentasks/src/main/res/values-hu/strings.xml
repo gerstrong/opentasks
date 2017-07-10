@@ -253,7 +253,4 @@
     <!-- Incoming share -->
     <string name="share_as_task">Feladat létrehozása</string>
 
-    <!-- Outgoing share -->
-    <string name="opentasks_share_footer">OpenTasks-al küldve</string>
-
 </resources>

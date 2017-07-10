@@ -1,0 +1,18 @@
+{{ title }}
+============
+{% if hasDescription %}
+{{ description }}
+{% end %}{% if hasCheckListItems %}{% for item in checkListItems %}
+[{% if item.checked %}X{% else %} {% end %}] {{ item.text }}{% end %}
+{% end %}{% if hasLocation %}
+Location: {{ location }}{% end %}{% if hasStart %}
+Start: {{ startDateTime }}{% end %}{% if hasDue %}
+Due: {{ dueDateTime }}{% end %}{% if hasCompleted %}
+Completed: {{ completedDateTime }}{% end %}{% if hasPriority %}
+Priority: {{ priority }}{% end %}{% if hasPrivacy %}
+Privacy: {{ privacy }}{% end %}{% if hasStatus %}
+Status: {{ status }}{% end %}{% if hasUrl %}
+{{ url }}{% end %}
+
+--
+Shared by OpenTasks

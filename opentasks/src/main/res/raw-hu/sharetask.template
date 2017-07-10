@@ -1,0 +1,18 @@
+{{ title }}
+============
+{% if hasDescription %}
+{{ description }}
+{% end %}{% if hasCheckListItems %}{% for item in checkListItems %}
+[{% if item.checked %}X{% else %} {% end %}] {{ item.text }}{% end %}
+{% end %}{% if hasLocation %}
+Helyszín: {{ location }}{% end %}{% if hasStart %}
+Kezdés: {{ startDateTime }}{% end %}{% if hasDue %}
+Esedékes: {{ dueDateTime }}{% end %}{% if hasCompleted %}
+Befejezve: {{ completedDateTime }}{% end %}{% if hasPriority %}
+Prioritás: {{ priority }}{% end %}{% if hasPrivacy %}
+Adatvédelem: {{ privacy }}{% end %}{% if hasStatus %}
+Állapot: {{ status }}{% end %}{% if hasUrl %}
+{{ url }}{% end %}
+
+--
+OpenTasks-al megosztva

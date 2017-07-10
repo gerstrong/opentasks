@@ -251,7 +251,4 @@
     <!-- Incoming share -->
     <string name="share_as_task">Aufgabe erstellen</string>
 
-    <!-- Outgoing share -->
-    <string name="opentasks_share_footer">Geteilt mit OpenTasks</string>
-
 </resources>

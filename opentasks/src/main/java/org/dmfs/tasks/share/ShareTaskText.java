@@ -1,6 +1,5 @@
 /*
- * Copyright 2016 Marten Gajda <marten@dmfs.org>
- *
+ * Copyright 2017 dmfs GmbH
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,9 +17,9 @@
 package org.dmfs.tasks.share;
 
 import android.content.Context;
-import android.support.annotation.StringRes;
 import android.text.TextUtils;
 import android.text.format.Time;
+import android.util.Log;
 
 import org.dmfs.provider.tasks.TaskContract;
 import org.dmfs.tasks.R;
@@ -29,13 +28,19 @@ import org.dmfs.tasks.model.ContentSet;
 import org.dmfs.tasks.model.Model;
 import org.dmfs.tasks.model.TaskFieldAdapters;
 import org.dmfs.tasks.model.adapters.TimeZoneWrapper;
-import org.dmfs.tasks.utils.AbstractStringCharSequence;
 import org.dmfs.tasks.utils.DateFormatter;
+import org.dmfs.tasks.utils.charsequence.AbstractCharSequence;
+import org.dmfs.tasks.utils.factory.Factory;
 
 import java.net.URL;
-import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.TimeZone;
+import java.util.TreeMap;
+
+import au.com.codeka.carrot.CarrotEngine;
+import au.com.codeka.carrot.CarrotException;
+import au.com.codeka.carrot.Configuration;
 
 /*
  <task title>
@@ -60,201 +65,163 @@ import java.util.TimeZone;
 
 
 /**
- * The text description for the whole task to share with other apps. (See the format above.)
+ * {@link CharSequence} for sharing task information, uses <code>carrot</code> template engine.
  *
  * @author Gabor Keszthelyi
  */
-public class ShareTaskText extends AbstractStringCharSequence implements CharSequence
+public class ShareTaskText extends AbstractCharSequence
 {
-    private static final String NEW_LINE = "\n";
-
-
-    public ShareTaskText(ContentSet contentSet, Model model, Context context)
+    public ShareTaskText(final ContentSet contentSet, final Model model, final Context context)
     {
-        // TODO Use a Factory here when the corresponding classes are available from java tools library
-        super(create(contentSet, model, context));
+        super(new OutputFactory(contentSet, model, context));
     }
 
 
-    private static String create(ContentSet contentSet, Model model, Context context)
+    private static final class OutputFactory implements Factory<CharSequence>
     {
-        StringBuilder sb = new StringBuilder();
+        private final ContentSet mContentSet;
+        private final Model mModel;
+        private final Context mContext;
 
-        appendTitle(sb, contentSet);
-        sb.append(NEW_LINE);
 
-        boolean appendedDesc = appendDescription(sb, contentSet);
-        boolean appendedItems = appendChecklistItems(sb, contentSet);
-        if (appendedDesc || appendedItems)
+        public OutputFactory(ContentSet contentSet, Model model, Context context)
         {
-            sb.append(NEW_LINE);
+            mContentSet = contentSet;
+            mModel = model;
+            mContext = context;
         }
 
-        appendLocation(sb, contentSet, context);
-        appendTimes(sb, contentSet, context);
-        appendPriority(sb, contentSet, model, context);
-        appendPrivacy(sb, contentSet, model, context);
-        appendStatus(sb, contentSet, model, context);
-        appendUrl(sb, contentSet);
-        sb.append(NEW_LINE);
 
-        appendFooter(sb, context);
-
-        return sb.toString();
-
-    }
-
-
-    private static void appendTitle(StringBuilder sb, ContentSet contentSet)
-    {
-        String title = TaskFieldAdapters.TITLE.get(contentSet);
-        if (title != null)
+        @Override
+        public CharSequence create()
         {
-            sb.append(title).append(NEW_LINE);
-
-            // try to create about the same length of underline as the title ('=' char is wider than average char width):
-            char[] underlineChars = new char[(int) (title.length() * 0.85)];
-            Arrays.fill(underlineChars, '=');
-            sb.append(new String(underlineChars)).append(NEW_LINE);
-        }
-
-    }
-
-
-    private static boolean appendDescription(StringBuilder sb, ContentSet contentSet)
-    {
-        String description = TaskFieldAdapters.DESCRIPTION.get(contentSet);
-        if (!TextUtils.isEmpty(description))
-        {
-            sb.append(description).append(NEW_LINE);
-            return true;
-        }
-        return false;
-    }
-
-
-    private static boolean appendChecklistItems(StringBuilder sb, ContentSet contentSet)
-    {
-        boolean appended = false;
-        List<CheckListItem> checkListItems = TaskFieldAdapters.CHECKLIST.get(contentSet);
-        if (checkListItems != null)
-        {
-            for (CheckListItem item : checkListItems)
+            CarrotEngine engine = new CarrotEngine();
+            Configuration config = engine.getConfig();
+            config.setResourceLocater(new RawIdResourceLocator(mContext));
+            try
             {
-                if (!TextUtils.isEmpty(item.text))
-                {
-                    sb.append('[').append(item.checked ? 'x' : ' ').append("] ").append(item.text).append(NEW_LINE);
-                    appended = true;
-                }
+                String templateName = String.valueOf(R.raw.sharetask);
+                String output = engine.process(templateName, bindings());
+                Log.v("ShareTaskText", output);
+                return output;
+            }
+            catch (CarrotException e)
+            {
+                throw new RuntimeException("Failed to process template with carrot", e);
             }
         }
-        return appended;
-    }
 
 
-    private static void appendLocation(StringBuilder sb, ContentSet contentSet, Context context)
-    {
-        String location = TaskFieldAdapters.LOCATION.get(contentSet);
-        if (!TextUtils.isEmpty(location))
+        private Map<String, Object> bindings()
         {
-            appendProperty(sb, R.string.task_location, location, context);
+            Map<String, Object> bindings = new TreeMap<>();
+
+            // Title
+            bindings.put("title", TaskFieldAdapters.TITLE.get(mContentSet));
+
+            // Description
+            String description = TaskFieldAdapters.DESCRIPTION.get(mContentSet);
+            bindings.put("hasDescription", !TextUtils.isEmpty(description));
+            bindings.put("description", description);
+
+            // Checklist items
+            List<CheckListItem> checkListItems = TaskFieldAdapters.CHECKLIST.get(mContentSet);
+            boolean hasCheckListItems = checkListItems != null && !checkListItems.isEmpty();
+            bindings.put("hasCheckListItems", hasCheckListItems);
+            bindings.put("checkListItems", checkListItems);
+
+            // Location
+            String location = TaskFieldAdapters.LOCATION.get(mContentSet);
+            bindings.put("hasLocation", !TextUtils.isEmpty(location));
+            bindings.put("location", location);
+
+            // Start time
+            Time startTime = TaskFieldAdapters.DTSTART.get(mContentSet);
+            boolean hasStart = startTime != null;
+            bindings.put("hasStart", hasStart);
+            if (hasStart)
+            {
+                bindings.put("startDateTime", formatTime(startTime));
+            }
+
+            // Due time
+            Time dueTime = TaskFieldAdapters.DUE.get(mContentSet);
+            boolean hasDue = dueTime != null;
+            bindings.put("hasDue", hasDue);
+            if (hasDue)
+            {
+                bindings.put("dueDateTime", formatTime(dueTime));
+            }
+
+            // Completed time
+            Time completedTime = TaskFieldAdapters.COMPLETED.get(mContentSet);
+            boolean hasCompleted = completedTime != null;
+            bindings.put("hasCompleted", completedTime != null);
+            if (hasCompleted)
+            {
+                bindings.put("completedDateTime", formatTime(completedTime));
+            }
+
+            // Priority
+            Integer priority = TaskFieldAdapters.PRIORITY.get(mContentSet);
+            boolean hasPriority = priority != null;
+            bindings.put("hasPriority", hasPriority);
+            if (hasPriority)
+            {
+                String priorityText = mModel.getField(R.id.task_field_priority).getChoices().getTitle(priority);
+                bindings.put("priority", priorityText);
+            }
+
+            // Privacy
+            Integer classification = TaskFieldAdapters.CLASSIFICATION.get(mContentSet);
+            boolean hasPrivacy = classification != null;
+            bindings.put("hasPrivacy", hasPrivacy);
+            if (hasPrivacy)
+            {
+                String classificationText = mModel.getField(R.id.task_field_classification)
+                        .getChoices()
+                        .getTitle(classification);
+                bindings.put("privacy", classificationText);
+            }
+
+            // Status
+            Integer status = TaskFieldAdapters.STATUS.get(mContentSet);
+            boolean hasStatus = status != null && !status.equals(TaskContract.Tasks.STATUS_COMPLETED);
+            bindings.put("hasStatus", hasStatus);
+            if (hasStatus)
+            {
+                String statusText = mModel.getField(R.id.task_field_status).getChoices().getTitle(status);
+                bindings.put("status", statusText);
+            }
+
+            // Url
+            URL url = TaskFieldAdapters.URL.get(mContentSet);
+            boolean hasUrl = url != null;
+            bindings.put("hasUrl", hasUrl);
+            if (hasUrl)
+            {
+                bindings.put("url", url);
+            }
+
+            return bindings;
         }
-    }
 
 
-    private static void appendTimes(StringBuilder sb, ContentSet contentSet, Context context)
-    {
-        TimeZoneWrapper timeZoneW = getTimeZoneWrapper(contentSet);
-        appendTime(sb, R.string.task_start, TaskFieldAdapters.DTSTART.get(contentSet), timeZoneW, context);
-        appendTime(sb, R.string.task_due, TaskFieldAdapters.DUE.get(contentSet), timeZoneW, context);
-        appendTime(sb, R.string.task_completed, TaskFieldAdapters.COMPLETED.get(contentSet), timeZoneW, context);
-    }
-
-
-    private static TimeZoneWrapper getTimeZoneWrapper(ContentSet contentSet)
-    {
-        TimeZone timeZone = TaskFieldAdapters.TIMEZONE.get(contentSet);
-        return timeZone != null ? new TimeZoneWrapper(timeZone) : null;
-    }
-
-
-    private static void appendTime(StringBuilder sb, @StringRes int nameResId, Time time, TimeZoneWrapper timeZone, Context context)
-    {
-        if (time != null)
+        private String formatTime(Time time)
         {
-            appendProperty(sb, nameResId, formatTime(time, timeZone, context), context);
+            String dateTimeText = new DateFormatter(mContext).format(time, DateFormatter.DateFormatContext.DETAILS_VIEW);
+            TimeZone timeZone = TaskFieldAdapters.TIMEZONE.get(mContentSet);
+            if (timeZone == null)
+            {
+                return dateTimeText;
+            }
+            else
+            {
+                TimeZoneWrapper tzw = new TimeZoneWrapper(timeZone);
+                String timeZoneText = tzw.getDisplayName(tzw.inDaylightTime(time.toMillis(false)), TimeZone.SHORT);
+                return dateTimeText + " " + timeZoneText;
+            }
         }
-    }
 
-
-    private static String formatTime(Time time, TimeZoneWrapper timeZone, Context context)
-    {
-        String dateTimeText = new DateFormatter(context).format(time, DateFormatter.DateFormatContext.DETAILS_VIEW);
-        if (timeZone == null)
-        {
-            return dateTimeText;
-        }
-        String timeZoneText = timeZone.getDisplayName(timeZone.inDaylightTime(time.toMillis(false)),
-                TimeZone.SHORT);
-        return dateTimeText + " " + timeZoneText;
-    }
-
-
-    private static void appendPriority(StringBuilder sb, ContentSet contentSet, Model model, Context context)
-    {
-        Integer priorityValue = TaskFieldAdapters.PRIORITY.get(contentSet);
-        if (priorityValue != null)
-        {
-            String priorityText = model.getField(R.id.task_field_priority).getChoices().getTitle(priorityValue);
-            appendProperty(sb, R.string.task_priority, priorityText, context);
-        }
-    }
-
-
-    private static void appendPrivacy(StringBuilder sb, ContentSet contentSet, Model model, Context context)
-    {
-        Integer classificationValue = TaskFieldAdapters.CLASSIFICATION.get(contentSet);
-        if (classificationValue != null)
-        {
-            String classificationText = model.getField(R.id.task_field_classification)
-                    .getChoices()
-                    .getTitle(classificationValue);
-            appendProperty(sb, R.string.task_classification, classificationText, context);
-        }
-    }
-
-
-    private static void appendStatus(StringBuilder sb, ContentSet contentSet, Model model, Context context)
-    {
-        Integer statusValue = TaskFieldAdapters.STATUS.get(contentSet);
-        if (statusValue != null && !statusValue.equals(TaskContract.Tasks.STATUS_COMPLETED))
-        {
-            String statusText = model.getField(R.id.task_field_status).getChoices().getTitle(statusValue);
-            appendProperty(sb, R.string.task_status, statusText, context);
-        }
-    }
-
-
-    private static void appendUrl(StringBuilder sb, ContentSet contentSet)
-    {
-        URL url = TaskFieldAdapters.URL.get(contentSet);
-        if (url != null)
-        {
-            sb.append(url).append(NEW_LINE);
-        }
-    }
-
-
-    private static void appendFooter(StringBuilder sb, Context context)
-    {
-        sb.append("--").append(NEW_LINE);
-        sb.append(context.getString(R.string.opentasks_share_footer));
-    }
-
-
-    private static void appendProperty(StringBuilder sb, @StringRes int nameResId, String value, Context context)
-    {
-        sb.append(context.getString(nameResId)).append(": ").append(value).append(NEW_LINE);
     }
 }
-
