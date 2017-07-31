@@ -21,6 +21,7 @@ package org.dmfs.tasks.utils;
  *
  * @author Gabor Keszthelyi
  */
+// TODO Remove this class when the Factory, Lazy, AbstractCachingCharSequence line is available in java tools library
 public abstract class AbstractStringCharSequence implements CharSequence
 {
     private final String mValue;
